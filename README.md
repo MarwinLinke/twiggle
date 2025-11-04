@@ -44,6 +44,6 @@ Currently, the following flags are available:
 | Flag          | Description                                                      |
 |---------------|------------------------------------------------------------------|
 | `--icons`     | Enables icons (a nerd font is needed for icons to be displayed). |
-| `--no_colors` | Disables all colors.                                             |
+| `--no-colors` | Disables all colors.                                             |
 
 Remember to add these to your shell configuration file instead of behind the alias.
