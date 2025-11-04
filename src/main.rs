@@ -3,42 +3,45 @@ mod raw_mode;
 mod screen;
 mod visualize;
 
-use crossterm::event::{self, Event, KeyCode};
+use clap::Parser;
+use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-use fetcher::get_dirs;
+use fetcher::{get_dirs_files, starts_with};
 use raw_mode::RawModeGuard;
 use screen::Screen;
 use std::{env, io};
 use visualize::{Mode, View};
 
-fn main() -> io::Result<()> {
-    let _raw_mode = RawModeGuard::new();
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, default_value_t = false)]
+    no_colors: bool,
 
+    #[arg(short, long, default_value_t = false)]
+    icons: bool,
+}
+
+fn main() -> io::Result<()> {
+    let args = Args::parse();
+
+    let _raw_mode = RawModeGuard::new();
     let keybinds = "1234567890";
     let screen = Screen::new();
 
-    let mut view: View = View::new(screen, keybinds.to_string());
-
-    let mut ambiguous_char: Option<char> = None;
+    let mut view: View = View::new(screen, keybinds.to_string(), !args.no_colors, args.icons);
+    let mut prefix = String::from("");
     let mut current_page: Option<usize> = None;
-
     let mut needs_redraw = true;
 
     loop {
         let current_dir = std::env::current_dir()?;
-        let (char_map, files) = get_dirs()?;
+        let (dirs, files) = get_dirs_files()?;
 
         if needs_redraw {
             disable_raw_mode()?;
-            //eprintln!("{:?}", char_map);
             view.prepare_screen()?;
-            view.print_screen(
-                &current_dir,
-                &char_map,
-                &files,
-                ambiguous_char,
-                current_page,
-            )?;
+            view.print_screen(&current_dir, &dirs, &files, &prefix, current_page)?;
             view.tidy_up_screen()?;
             enable_raw_mode()?;
         }
@@ -58,45 +61,63 @@ fn main() -> io::Result<()> {
 
                     match view.mode() {
                         Mode::Normal => {
-                            let dict_entries = match char_map.get(&c) {
-                                Some(entry) => entry,
-                                None => continue, // early exit if not found
-                            };
+                            prefix = String::from("");
+                            let filtered_dirs = starts_with(&dirs, &c.to_string());
 
-                            if dict_entries.len() > 1 {
+                            if filtered_dirs.is_empty() {
+                                continue;
+                            }
+
+                            if filtered_dirs.len() > 1 {
                                 needs_redraw = true;
                                 view.change_mode(Mode::Sub);
                                 current_page = Some(0);
-                                ambiguous_char = Some(c);
+                                prefix = c.to_string();
                                 continue;
                             }
 
                             needs_redraw = true;
-                            env::set_current_dir(dict_entries[0].file_name().unwrap())?;
+                            env::set_current_dir(filtered_dirs[0].file_name().unwrap())?;
                         }
                         Mode::Sub => {
-                            let dicts = char_map.get(&ambiguous_char.unwrap()).unwrap();
+                            let filtered_dirs = starts_with(&dirs, &prefix);
 
-                            let max_page = dicts.len() / 10;
+                            let n = filtered_dirs.len();
+                            let max_page = if n == 0 { 0 } else { (n - 1) / 10 };
 
-                            match c {
-                                'n' | 'f' => {
-                                    current_page = current_page.map(|p| (p + 1).min(max_page));
-                                    needs_redraw = true;
+                            if e.modifiers.contains(KeyModifiers::CONTROL) {
+                                match c {
+                                    'f' => {
+                                        current_page = current_page.map(|p| (p + 1).min(max_page));
+                                        needs_redraw = true;
+                                    }
+                                    'b' => {
+                                        current_page = current_page.map(|p| p.saturating_sub(1));
+                                        needs_redraw = true;
+                                    }
+                                    'n' => {
+                                        current_page = current_page.map(|p| p + 1);
+                                        if current_page.unwrap_or(0) > max_page {
+                                            current_page = Some(0);
+                                        }
+                                        needs_redraw = true;
+                                    }
+                                    _ => (),
                                 }
-                                'b' => {
-                                    current_page = current_page.map(|p| p.saturating_sub(1));
-                                    needs_redraw = true;
-                                }
-                                _ => (),
+                                continue;
                             }
 
                             let index = match keybinds.find(c) {
                                 Some(i) => i + current_page.unwrap_or_default() * 10,
-                                None => continue,
+                                None => {
+                                    prefix.push(c);
+                                    current_page = Some(0);
+                                    needs_redraw = true;
+                                    continue;
+                                }
                             };
 
-                            let dict = match dicts.get(index) {
+                            let dict = match filtered_dirs.get(index) {
                                 Some(dict) => dict,
                                 None => continue,
                             };
@@ -110,7 +131,12 @@ fn main() -> io::Result<()> {
                 KeyCode::Backspace => {
                     needs_redraw = true;
                     if matches!(view.mode(), Mode::Sub) {
-                        view.change_mode(Mode::Normal);
+                        if prefix.len() > 1 {
+                            prefix.pop();
+                            current_page = Some(0);
+                        } else {
+                            view.change_mode(Mode::Normal);
+                        }
                     } else {
                         env::set_current_dir("..")?;
                     }

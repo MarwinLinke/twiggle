@@ -6,9 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-type DirMap = io::Result<(BTreeMap<char, Vec<PathBuf>>, Vec<PathBuf>)>;
-
-pub fn get_dirs() -> DirMap {
+pub fn get_dirs_files() -> io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
     let path = env::current_dir()?;
     let entries = collect_entries(&path)?;
 
@@ -24,12 +22,10 @@ pub fn get_dirs() -> DirMap {
         }
     }
 
-    let char_map = build_char_map(&dirs);
-
-    Ok((char_map, files))
+    Ok((dirs, files))
 }
 
-fn build_char_map(paths: &[PathBuf]) -> BTreeMap<char, Vec<PathBuf>> {
+pub fn build_char_map(paths: &[PathBuf]) -> BTreeMap<char, Vec<PathBuf>> {
     let mut map: BTreeMap<char, Vec<PathBuf>> = BTreeMap::new();
 
     for path in paths {
@@ -40,6 +36,17 @@ fn build_char_map(paths: &[PathBuf]) -> BTreeMap<char, Vec<PathBuf>> {
     }
 
     map
+}
+
+pub fn starts_with(dirs: &[PathBuf], prefix: &str) -> Vec<PathBuf> {
+    dirs.iter()
+        .filter(|dir| {
+            dir.file_name()
+                .map(|os_str| os_str.to_string_lossy().starts_with(prefix))
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect()
 }
 
 fn collect_entries(path: &Path) -> io::Result<Vec<DirEntry>> {
