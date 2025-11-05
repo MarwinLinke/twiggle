@@ -1,13 +1,11 @@
-mod fetcher;
-mod raw_mode;
+mod dir_util;
 mod screen;
 mod visualize;
 
 use clap::Parser;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-use fetcher::{get_dirs_files, starts_with};
-use raw_mode::RawModeGuard;
+use crossterm::terminal::disable_raw_mode;
+use dir_util::{get_dirs_files, starts_with};
 use screen::Screen;
 use std::{env, io};
 use visualize::{Mode, View};
@@ -20,41 +18,49 @@ struct Args {
 
     #[arg(short, long, default_value_t = false)]
     icons: bool,
+
+    #[arg(long, default_value_t = false)]
+    debug: bool,
 }
 
 fn main() -> io::Result<()> {
     let args = Args::parse();
 
-    let _raw_mode = RawModeGuard::new();
     let keybinds = "1234567890";
     let screen = Screen::new();
 
-    let mut view: View = View::new(screen, keybinds.to_string(), !args.no_colors, args.icons);
+    let mut view: View = View::new(
+        screen,
+        keybinds.to_string(),
+        !args.no_colors,
+        args.icons,
+        args.debug,
+    );
     let mut prefix = String::from("");
     let mut current_page: Option<usize> = None;
-    let mut needs_redraw = true;
 
     loop {
         let current_dir = std::env::current_dir()?;
         let (dirs, files) = get_dirs_files()?;
 
-        if needs_redraw {
-            disable_raw_mode()?;
-            view.prepare_screen()?;
-            view.print_screen(&current_dir, &dirs, &files, &prefix, current_page)?;
-            view.tidy_up_screen()?;
-            enable_raw_mode()?;
-        }
-
-        needs_redraw = false;
+        view.prepare_screen()?;
+        view.display(
+            &current_dir,
+            &dirs,
+            &files,
+            &prefix,
+            current_page.unwrap_or_default(),
+        )?;
+        view.clear_screen()?;
 
         if let Event::Key(e) = event::read()? {
+            view.debug_message(format!("Current char: {} {}", e.code, e.modifiers));
             match e.code {
                 KeyCode::Char(c) => {
                     if c == '~' {
                         let home_dir = dirs::home_dir().expect("Could not find home directory");
-                        needs_redraw = true;
                         env::set_current_dir(&home_dir)?;
+                        view.dirty();
                         view.change_mode(Mode::Normal);
                         continue;
                     }
@@ -69,14 +75,14 @@ fn main() -> io::Result<()> {
                             }
 
                             if filtered_dirs.len() > 1 {
-                                needs_redraw = true;
+                                view.dirty();
                                 view.change_mode(Mode::Sub);
                                 current_page = Some(0);
                                 prefix = c.to_string();
                                 continue;
                             }
 
-                            needs_redraw = true;
+                            view.dirty();
                             env::set_current_dir(filtered_dirs[0].file_name().unwrap())?;
                         }
                         Mode::Sub => {
@@ -89,18 +95,18 @@ fn main() -> io::Result<()> {
                                 match c {
                                     'f' => {
                                         current_page = current_page.map(|p| (p + 1).min(max_page));
-                                        needs_redraw = true;
+                                        view.dirty();
                                     }
                                     'b' => {
                                         current_page = current_page.map(|p| p.saturating_sub(1));
-                                        needs_redraw = true;
+                                        view.dirty();
                                     }
                                     'n' => {
                                         current_page = current_page.map(|p| p + 1);
                                         if current_page.unwrap_or(0) > max_page {
                                             current_page = Some(0);
                                         }
-                                        needs_redraw = true;
+                                        view.dirty();
                                     }
                                     _ => (),
                                 }
@@ -112,7 +118,7 @@ fn main() -> io::Result<()> {
                                 None => {
                                     prefix.push(c);
                                     current_page = Some(0);
-                                    needs_redraw = true;
+                                    view.dirty();
                                     continue;
                                 }
                             };
@@ -122,14 +128,14 @@ fn main() -> io::Result<()> {
                                 None => continue,
                             };
 
-                            needs_redraw = true;
                             env::set_current_dir(dict.file_name().unwrap())?;
+                            view.dirty();
                             view.change_mode(Mode::Normal);
                         }
                     }
                 }
                 KeyCode::Backspace => {
-                    needs_redraw = true;
+                    view.dirty();
                     if matches!(view.mode(), Mode::Sub) {
                         if prefix.len() > 1 {
                             prefix.pop();
@@ -146,6 +152,7 @@ fn main() -> io::Result<()> {
                     break;
                 }
                 KeyCode::Enter => {
+                    disable_raw_mode()?;
                     println!("{}", env::current_dir().unwrap().display());
                     break;
                 }

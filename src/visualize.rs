@@ -1,8 +1,9 @@
 use crate::screen::Screen;
 
-use crate::fetcher::build_char_map;
+use crate::dir_util::build_char_map;
 use crossterm::style::Color;
 use crossterm::style::Stylize;
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
 use std::path::Path;
 use std::path::PathBuf;
@@ -17,18 +18,37 @@ pub struct View {
     screen: Screen,
     keybinds: String,
     current_mode: Mode,
+    debug_messages: Vec<String>,
     use_colors: bool,
     use_icons: bool,
+    use_debug: bool,
+    is_dirty: bool,
+}
+
+impl Drop for View {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = self.screen.show_cursor();
+    }
 }
 
 impl View {
-    pub fn new(screen: Screen, keybinds: String, use_colors: bool, use_icons: bool) -> Self {
+    pub fn new(
+        screen: Screen,
+        keybinds: String,
+        use_colors: bool,
+        use_icons: bool,
+        use_debug: bool,
+    ) -> Self {
         View {
             screen,
             keybinds,
             current_mode: Mode::Normal,
+            debug_messages: Vec::new(),
             use_colors,
             use_icons,
+            use_debug,
+            is_dirty: true,
         }
     }
 
@@ -40,24 +60,69 @@ impl View {
         self.current_mode
     }
 
+    pub fn debug_message(&mut self, message: String) {
+        if self.use_debug {
+            self.dirty();
+            self.debug_messages.push(message);
+        }
+    }
+
+    pub fn dirty(&mut self) {
+        self.is_dirty = true;
+    }
+
     pub fn prepare_screen(&mut self) -> std::io::Result<()> {
-        self.screen.hide_cursor()?;
-        self.screen.move_up()
+        if self.is_dirty {
+            disable_raw_mode()?;
+            self.screen.hide_cursor()?;
+            self.screen.move_up()?;
+        }
+        Ok(())
     }
 
-    pub fn tidy_up_screen(&mut self) -> std::io::Result<()> {
-        self.screen.clear_rest()?;
-        self.screen.show_cursor()
+    pub fn clear_screen(&mut self) -> std::io::Result<()> {
+        if self.is_dirty {
+            self.debug_messages.clear();
+            self.screen.clear_rest()?;
+            self.screen.show_cursor()?;
+            self.is_dirty = false;
+            enable_raw_mode()?;
+        }
+        Ok(())
     }
 
-    pub fn print_screen(
+    pub fn display(
         &mut self,
         current_dir: &Path,
         dirs: &[PathBuf],
         files: &[PathBuf],
         prefix: &str,
-        current_page: Option<usize>,
+        current_page: usize,
     ) -> std::io::Result<()> {
+        if self.is_dirty {
+            self.print_screen(current_dir, dirs, files, prefix, current_page)?;
+        }
+        Ok(())
+    }
+
+    fn print_screen(
+        &mut self,
+        current_dir: &Path,
+        dirs: &[PathBuf],
+        files: &[PathBuf],
+        prefix: &str,
+        current_page: usize,
+    ) -> std::io::Result<()> {
+        if !self.debug_messages.is_empty() {
+            self.screen.write(" Debug ".black().on_cyan().bold())?;
+
+            for message in &self.debug_messages {
+                self.screen.write(message.clone().cyan())?;
+            }
+
+            self.screen.empty_line()?;
+        }
+
         let path_str = display_path(current_dir);
 
         let blue = self.color_or_white(Color::Blue);
@@ -68,11 +133,7 @@ impl View {
 
         match self.current_mode {
             Mode::Normal => self.print_normal(dirs),
-            Mode::Sub => self.print_sub(
-                dirs,
-                prefix,
-                current_page.expect("Current page is not set."),
-            ),
+            Mode::Sub => self.print_sub(dirs, prefix, current_page),
         }?;
 
         let file_str = files
