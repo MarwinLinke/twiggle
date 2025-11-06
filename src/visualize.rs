@@ -1,6 +1,8 @@
+use crate::dir_util::build_char_map;
+use crate::dir_util::get_name;
+use crate::icons::icon_for_file;
 use crate::screen::Screen;
 
-use crate::dir_util::build_char_map;
 use crossterm::style::Color;
 use crossterm::style::Stylize;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
@@ -136,21 +138,36 @@ impl View {
             Mode::Sub => self.print_sub(dirs, prefix, current_page),
         }?;
 
-        let file_str = files
+        // let file_str = files
+        //     .iter()
+        //     .map(|f| f.file_name().unwrap().to_string_lossy().to_string())
+        //     .collect::<Vec<String>>()
+        //     .join(" ");
+
+        let file_icons = files
             .iter()
-            .map(|f| f.file_name().unwrap().to_string_lossy().to_string())
+            .map(|file| {
+                let icon = if self.use_icons {
+                    &format!("{} ", icon_for_file(file))[..]
+                } else {
+                    ""
+                };
+                let name = get_name(file);
+                format!("{}{}", icon, name)
+            })
             .collect::<Vec<String>>()
-            .join(" ");
+            .join("  ");
 
         let magenta = self.color_or_white(Color::Magenta);
+
         let files_header_str = if files.is_empty() {
             " No Files "
         } else {
             " Files "
         };
-        let files_header = files_header_str.black().on(magenta).bold();
 
-        let file_info = format!("{} {}", files_header, file_str.with(magenta));
+        let files_header = files_header_str.black().on(magenta).bold();
+        let file_info = format!("{} {}", files_header, file_icons.with(magenta));
 
         self.screen.write(file_info)?;
         self.screen.empty_line()?;
@@ -161,7 +178,7 @@ impl View {
     }
 
     fn print_normal(&mut self, dirs: &[PathBuf]) -> std::io::Result<()> {
-        let dir_single_icon = if self.use_icons { "  " } else { "" };
+        //let dir_single_icon = if self.use_icons { "  " } else { "" };
         let dir_multiple_icon = if self.use_icons { "󰉓  " } else { "" };
 
         let yellow = self.color_or_white(Color::DarkYellow);
@@ -175,29 +192,35 @@ impl View {
 
         let char_map = build_char_map(dirs);
 
-        for dir in char_map {
-            let dir_str = dir
-                .1
+        for directories_with_char in char_map {
+            let (char, directories) = directories_with_char;
+            let is_multiple = directories.len() > 1;
+
+            let dir_str = directories
                 .iter()
                 .map(|d| d.file_name().unwrap().to_string_lossy().to_string())
                 .collect::<Vec<String>>()
                 .join(" ");
 
-            let single = format!(
-                "[{}] {}",
-                dir.0,
-                format!("{}{}", dir_single_icon, dir_str).with(yellow)
-            );
-            let multiple = format!(
-                "[{}?] {}",
-                dir.0,
-                format!("{}{}", dir_multiple_icon, dir_str).white()
-            );
-
-            if dir.1.len() > 1 {
-                self.screen.write(multiple)?;
+            if is_multiple {
+                self.screen.write(format!(
+                    "[{}?] {}",
+                    char,
+                    format!("{}{}", dir_multiple_icon, dir_str).white()
+                ))?;
             } else {
-                self.screen.write(single)?;
+                let directory = &directories[0];
+                let icon: &str = if self.use_icons {
+                    &format!("{}  ", icon_for_file(directory))[..]
+                } else {
+                    ""
+                };
+
+                self.screen.write(format!(
+                    "[{}] {}",
+                    char,
+                    format!("{}{}", icon, dir_str).with(yellow)
+                ))?;
             }
         }
 
@@ -212,7 +235,7 @@ impl View {
         prefix: &str,
         current_page: usize,
     ) -> std::io::Result<()> {
-        let dir_single_icon = if self.use_icons { "  " } else { "" };
+        //let dir_single_icon = if self.use_icons { "  " } else { "" };
 
         let green = self.color_or_white(Color::DarkGreen);
         self.screen
@@ -235,14 +258,20 @@ impl View {
         let current_slice = &filtered_dirs[start_idx..end_idx];
         let other_dirs = [&filtered_dirs[..start_idx], &filtered_dirs[end_idx..]].concat();
 
-        for (i, dir) in current_slice.iter().enumerate() {
+        for (i, directory) in current_slice.iter().enumerate() {
             let number = match self.keybinds.chars().nth(i) {
                 Some(c) => c.to_string(),
                 None => String::from("..."),
             };
 
-            let dir_str = &dir.file_name().unwrap().to_string_lossy().to_string()[prefix.len()..];
-            let prefix_str = format!("{}{}", dir_single_icon, prefix.underlined()).with(green);
+            let icon: &str = if self.use_icons {
+                &format!("{}  ", icon_for_file(directory))[..]
+            } else {
+                ""
+            };
+
+            let dir_str = &get_name(directory)[prefix.len()..];
+            let prefix_str = format!("{}{}", icon, prefix.underlined()).with(green);
             self.screen.write(format!(
                 "[{}] {}{}",
                 number,

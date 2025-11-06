@@ -54,3 +54,28 @@ fn collect_entries(path: &Path) -> io::Result<Vec<DirEntry>> {
     entries.sort_by_key(|entry| entry.file_name());
     Ok(entries)
 }
+
+pub fn is_directory(path: &Path) -> bool {
+    path.metadata().map(|meta| meta.is_dir()).unwrap_or(false)
+}
+
+pub fn is_empty(path: &Path) -> bool {
+    if !is_directory(path) {
+        return false;
+    }
+
+    fs::read_dir(path)
+        .map(|mut entries| entries.next().is_none())
+        .unwrap_or(false)
+}
+
+pub fn get_extension(path: &Path) -> Option<String> {
+    path.extension()
+        .map(|ext| ext.to_string_lossy().to_string())
+}
+
+pub fn get_name(path: &Path) -> String {
+    path.file_name()
+        .map(|os| os.to_string_lossy().to_string())
+        .unwrap_or_default()
+}

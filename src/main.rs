@@ -1,4 +1,5 @@
 mod dir_util;
+mod icons;
 mod screen;
 mod visualize;
 
