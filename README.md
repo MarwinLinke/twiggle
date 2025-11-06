@@ -1,6 +1,6 @@
 # twiggle
 ---
-<img width="1920" height="1080" alt="Twiggle" src="https://github.com/user-attachments/assets/423b285c-b11b-4594-98b6-8535b3d38153" />
+<img width="1920" height="720" alt="TwiggleV2" src="https://github.com/user-attachments/assets/4072ae58-9925-45cb-87e6-6a98cec75edc" />
 
 ---
 twiggle is a fast directory traversal tool which allows you to move between directories using keybinds.
@@ -45,5 +45,8 @@ Currently, the following flags are available:
 |---------------|------------------------------------------------------------------|
 | `--icons`     | Enables icons (a nerd font is needed for icons to be displayed). |
 | `--no-colors` | Disables all colors.                                             |
+| `--debug`     | Displays custom debug messages.                                  |
 
 Remember to add these to your shell configuration file instead of behind the alias.
+## Special Thanks
+Displaying icons per file type was made possible with the logic inside `icons.rs` which was written by the [eza-community](https://github.com/eza-community/eza).
