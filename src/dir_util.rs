@@ -14,8 +14,7 @@ pub fn get_dirs_files() -> io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
     let mut files = Vec::new();
 
     for entry in entries {
-        let meta = entry.metadata()?;
-        if meta.is_dir() {
+        if is_directory(&entry.path()) {
             dirs.push(entry.path());
         } else {
             files.push(entry.path());
@@ -23,6 +22,12 @@ pub fn get_dirs_files() -> io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
     }
 
     Ok((dirs, files))
+}
+
+fn collect_entries(path: &Path) -> io::Result<Vec<DirEntry>> {
+    let mut entries: Vec<DirEntry> = fs::read_dir(path)?.collect::<Result<_, _>>()?;
+    entries.sort_by_key(|entry| entry.file_name());
+    Ok(entries)
 }
 
 pub fn build_char_map(paths: &[PathBuf]) -> BTreeMap<char, Vec<PathBuf>> {
@@ -49,15 +54,39 @@ pub fn starts_with(dirs: &[PathBuf], prefix: &str) -> Vec<PathBuf> {
         .collect()
 }
 
-fn collect_entries(path: &Path) -> io::Result<Vec<DirEntry>> {
-    let mut entries: Vec<DirEntry> = fs::read_dir(path)?.collect::<Result<_, _>>()?;
-    entries.sort_by_key(|entry| entry.file_name());
-    Ok(entries)
+pub fn filter_hidden(dirs: &[PathBuf]) -> Vec<PathBuf> {
+    dirs.iter()
+        .filter(|dir| {
+            dir.file_name()
+                .map(|os_str| !os_str.to_string_lossy().starts_with('.'))
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect()
 }
 
 pub fn is_directory(path: &Path) -> bool {
-    path.metadata().map(|meta| meta.is_dir()).unwrap_or(false)
+    match fs::symlink_metadata(path) {
+        Ok(meta) => {
+            if meta.is_dir() {
+                // It's a real directory
+                true
+            } else if meta.file_type().is_symlink() {
+                // It's a symlink — check if the target is a directory
+                fs::metadata(path)
+                    .map(|target_meta| target_meta.is_dir())
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        }
+        Err(_) => false,
+    }
 }
+//
+// pub fn is_directory(path: &Path) -> bool {
+//     path.metadata().map(|meta| meta.is_dir()).unwrap_or(false)
+// }
 
 pub fn is_empty(path: &Path) -> bool {
     if !is_directory(path) {

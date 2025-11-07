@@ -11,6 +11,8 @@ use screen::Screen;
 use std::{env, io};
 use visualize::{Mode, View};
 
+use crate::dir_util::filter_hidden;
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -22,6 +24,9 @@ struct Args {
 
     #[arg(long, default_value_t = false)]
     debug: bool,
+
+    #[arg(long, default_value_t = false)]
+    hide: bool,
 }
 
 fn main() -> io::Result<()> {
@@ -39,10 +44,16 @@ fn main() -> io::Result<()> {
     );
     let mut prefix = String::from("");
     let mut current_page: Option<usize> = None;
+    let mut show_hidden = !args.hide;
 
     loop {
         let current_dir = std::env::current_dir()?;
-        let (dirs, files) = get_dirs_files()?;
+        let (mut dirs, mut files) = get_dirs_files()?;
+
+        if !show_hidden {
+            dirs = filter_hidden(&dirs);
+            files = filter_hidden(&files);
+        }
 
         view.prepare_screen()?;
         view.display(
@@ -56,8 +67,15 @@ fn main() -> io::Result<()> {
 
         if let Event::Key(e) = event::read()? {
             view.debug_message(format!("Current char: {} {}", e.code, e.modifiers));
+            view.debug_message(format!("Show hidden files: {}", show_hidden));
             match e.code {
                 KeyCode::Char(c) => {
+                    if e.modifiers.contains(KeyModifiers::CONTROL) && c == 's' {
+                        show_hidden = !show_hidden;
+                        view.dirty();
+                        continue;
+                    }
+
                     if c == '~' {
                         let home_dir = dirs::home_dir().expect("Could not find home directory");
                         env::set_current_dir(&home_dir)?;
