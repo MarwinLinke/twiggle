@@ -82,7 +82,7 @@ impl View {
         Ok(())
     }
 
-    pub fn clear_screen(&mut self) -> std::io::Result<()> {
+    pub fn clear_rest(&mut self) -> std::io::Result<()> {
         if self.is_dirty {
             self.debug_messages.clear();
             self.screen.clear_rest()?;
@@ -90,6 +90,13 @@ impl View {
             self.is_dirty = false;
             enable_raw_mode()?;
         }
+        Ok(())
+    }
+
+    pub fn clear_screen(&mut self) -> std::io::Result<()> {
+        disable_raw_mode()?;
+        self.screen.move_up()?;
+        self.screen.clear_rest()?;
         Ok(())
     }
 

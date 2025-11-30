@@ -27,6 +27,9 @@ struct Args {
 
     #[arg(long, default_value_t = false)]
     hide: bool,
+
+    #[arg(long, default_value_t = false)]
+    clear: bool,
 }
 
 fn main() -> io::Result<()> {
@@ -63,7 +66,7 @@ fn main() -> io::Result<()> {
             &prefix,
             current_page.unwrap_or_default(),
         )?;
-        view.clear_screen()?;
+        view.clear_rest()?;
 
         if let Event::Key(e) = event::read()? {
             view.debug_message(format!("Current char: {} {}", e.code, e.modifiers));
@@ -178,6 +181,10 @@ fn main() -> io::Result<()> {
                 _ => {}
             }
         }
+    }
+
+    if args.clear {
+        view.clear_screen()?;
     }
 
     Ok(())

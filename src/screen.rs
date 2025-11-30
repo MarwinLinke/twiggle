@@ -88,6 +88,10 @@ impl Screen {
     }
 
     fn calculate_num_rows(&mut self) -> std::io::Result<usize> {
+        if self.line_lengths.is_empty() {
+            return Ok(0);
+        }
+
         let (num_columns, _) = size()?;
 
         let mut num_rows: usize = 0;
