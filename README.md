@@ -46,6 +46,7 @@ Currently, the following flags are available:
 | `--icons`     | Enables icons (a nerd font is needed for icons to be displayed). |
 | `--no-colors` | Disables all colors.                                             |
 | `--debug`     | Displays custom debug messages.                                  |
+| `--clear`     | Clears the output after closing.                                 |
 
 Remember to add these to your shell configuration file instead of behind the alias.
 ## Special Thanks
