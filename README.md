@@ -47,6 +47,7 @@ Currently, the following flags are available:
 | `--no-colors` | Disables all colors.                                             |
 | `--debug`     | Displays custom debug messages.                                  |
 | `--clear`     | Clears the output after closing.                                 |
+| `--hide`      | Hides dot files and directories.                                 |
 
 Remember to add these to your shell configuration file instead of behind the alias.
 
