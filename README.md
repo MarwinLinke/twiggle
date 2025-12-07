@@ -8,13 +8,17 @@ twiggle is a fast directory traversal tool which allows you to move between dire
 ## Installation
 To install twiggle, it is currently necessary to have `cargo` set up. For more information, look at the [rustup](https://rust-lang.org/tools/install/) installation guide.
 ### Git + Cargo
-You can clone this repository and use `cargo install` to have Cargo build the executable and put it in `.cargo`:
-
+You can install this repository directly via `cargo`:
+```
+cargo install --git https://github.com/MarwinLinke/twiggle.git
+```
+Alternatively, if you encounter problems or want to have the repository at a specific location, use this:
 ```
 git clone https://github.com/MarwinLinke/twiggle.git
 cd twiggle
 cargo install --path .
 ```
+In both cases, the executable should be created in `.cargo/bin`.
 
 ### Setup
 > [!IMPORTANT]
