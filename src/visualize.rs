@@ -1,6 +1,7 @@
 use crate::dir_util::build_char_map;
 use crate::dir_util::get_name;
 use crate::icons::icon_for_file;
+use crate::mode::Mode;
 use crate::screen::Screen;
 
 use crossterm::style::Color;
@@ -9,12 +10,6 @@ use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
 use std::path::Path;
 use std::path::PathBuf;
-
-#[derive(Debug, Clone, Copy)]
-pub enum Mode {
-    Normal,
-    Sub,
-}
 
 pub struct View {
     screen: Screen,
@@ -56,10 +51,6 @@ impl View {
 
     pub fn change_mode(&mut self, mode: Mode) {
         self.current_mode = mode;
-    }
-
-    pub fn mode(&self) -> Mode {
-        self.current_mode
     }
 
     pub fn debug_message(&mut self, message: String) {
@@ -142,7 +133,7 @@ impl View {
 
         match self.current_mode {
             Mode::Normal => self.print_normal(dirs),
-            Mode::Sub => self.print_sub(dirs, prefix, current_page),
+            Mode::Select => self.print_select(dirs, prefix, current_page),
         }?;
 
         // let file_str = files
@@ -236,7 +227,7 @@ impl View {
         Ok(())
     }
 
-    fn print_sub(
+    fn print_select(
         &mut self,
         dirs: &[PathBuf],
         prefix: &str,
