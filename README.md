@@ -58,16 +58,22 @@ Remember to add these to your shell configuration file instead of behind the ali
 ## Usage
 ### Useful key binds
 
-| Key bind      | Action                               |
-|---------------|--------------------------------------|
-| `<Enter>`     | Close and move to directory.         |
-| `<Esc>`       | Close and cancel.                    |
-| `<Backspace>` | Go into the parent directory.        |
-| `<~>`         | Go to the home directory.            |
-| `<C-b>`       | Go page backward.                    |
-| `<C-f>`       | Go page forward.                     |
-| `<C-n>`       | Rotate through pages.                |
-| `<C-s>`       | Show/Hide dot files and directories. |
+| Mode           | Key bind      | Action                               |
+| -------------- | ------------- | ------------------------------------ |
+| Normal         | `<Enter>`     | Close and move to directory.         |
+| Normal         | `<Esc>`       | Close and cancel.                    |
+| Normal         | `<Backspace>` | Go into the parent directory.        |
+| Normal         | `<~>`         | Go to the home directory.            |
+| Normal         | `<Up>`        | Go back in path history.             |
+| Normal         | `<Down>`      | Go forward in path history.          |
+| Normal         | `<C-s>`       | Show/Hide dot files and directories. |
+| Select         | `<Backspace>` | Delete char from prefix filter.      |
+| Select         | `<C-b>`       | Go page backward.                    |
+| Select         | `<C-f>`       | Go page forward.                     |
+| Select         | `<C-n>`       | Rotate through pages.                |
+| Tab navigation | `<Enter>`     | Move to selected directory.          |
+| Tab navigation | `<Tab>`       | Select next directory.               |
+
 
 ## Special Thanks
 Displaying icons per file type was made possible with the logic inside `icons.rs` which was written by the [eza-community](https://github.com/eza-community/eza).
