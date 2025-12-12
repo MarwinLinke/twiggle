@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::{env, io};
 use visualize::View;
 
-use crate::dir_util::filter_hidden;
+use crate::dir_util::{build_char_map, filter_hidden};
 use crate::mode::Mode;
 
 #[derive(Parser, Debug)]
@@ -67,6 +67,7 @@ fn input_loop(view: &mut View, keybinds: &str, show_hidden_default: bool) -> io:
     let mut mode = Mode::Normal;
     let mut is_dirty;
     let mut has_terminated;
+    let mut cursor_index: Option<usize> = None;
     let mut history = PathHistory::new();
     history.push(env::current_dir()?);
 
@@ -80,8 +81,9 @@ fn input_loop(view: &mut View, keybinds: &str, show_hidden_default: bool) -> io:
         }
 
         view.debug_message(format!("Show hidden files: {}", show_hidden));
-        view.debug_message(format!("Index: {}", history.index));
-        view.debug_message(format!("History Length: {}", history.buffer.len()));
+        view.debug_message(format!("History index: {}", history.index));
+        view.debug_message(format!("History length: {}", history.buffer.len()));
+        view.debug_message(format!("Cursor index: {:?}", cursor_index));
 
         view.change_mode(mode);
         view.prepare_screen()?;
@@ -91,6 +93,8 @@ fn input_loop(view: &mut View, keybinds: &str, show_hidden_default: bool) -> io:
             &files,
             &prefix,
             current_page.unwrap_or_default(),
+            &history,
+            &cursor_index,
         )?;
         view.clear_rest()?;
 
@@ -106,6 +110,7 @@ fn input_loop(view: &mut View, keybinds: &str, show_hidden_default: bool) -> io:
                         &mut current_page,
                         &dirs,
                         &mut history,
+                        &mut cursor_index,
                     )?;
                 }
                 Mode::Select => {
@@ -118,6 +123,7 @@ fn input_loop(view: &mut View, keybinds: &str, show_hidden_default: bool) -> io:
                         keybinds,
                         &dirs,
                         &mut history,
+                        &mut cursor_index,
                     )?;
                 }
             }
@@ -134,6 +140,7 @@ fn input_loop(view: &mut View, keybinds: &str, show_hidden_default: bool) -> io:
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)] // I know it's bad
 fn handle_normal_mode(
     e: KeyEvent,
     prefix: &mut String,
@@ -142,10 +149,13 @@ fn handle_normal_mode(
     current_page: &mut Option<usize>,
     dirs: &[PathBuf],
     history: &mut PathHistory,
+    cursor_index: &mut Option<usize>,
 ) -> io::Result<(bool, bool)> {
     match e.code {
         KeyCode::Char(c) => {
-            if check_hidden_key(e, c, show_hidden) || check_home_key(c, mode, history)? {
+            if check_hidden_key(e, c, show_hidden, cursor_index)
+                || check_home_key(c, mode, history, cursor_index)?
+            {
                 return Ok((true, false));
             };
 
@@ -159,16 +169,19 @@ fn handle_normal_mode(
             if filtered_dirs.len() > 1 {
                 *mode = Mode::Select;
                 *current_page = Some(0);
+                *cursor_index = Some(0);
                 *prefix = c.to_string();
                 return Ok((true, false));
             }
 
+            *cursor_index = None;
             env::set_current_dir(filtered_dirs[0].file_name().unwrap())?;
             history.push(env::current_dir()?);
 
             Ok((true, false))
         }
         KeyCode::Backspace => {
+            *cursor_index = None;
             env::set_current_dir("..")?;
             history.push(env::current_dir()?);
 
@@ -179,6 +192,33 @@ fn handle_normal_mode(
             Ok((false, true))
         }
         KeyCode::Enter => {
+            if cursor_index.is_some() {
+                let index = cursor_index.unwrap_or(0);
+                let char_map = build_char_map(dirs);
+
+                let c = char_map.iter().nth(index).unwrap().0;
+
+                let filtered_dirs = starts_with(dirs, &c.to_string());
+
+                if filtered_dirs.is_empty() {
+                    return Ok((false, false));
+                }
+
+                if filtered_dirs.len() > 1 {
+                    *mode = Mode::Select;
+                    *current_page = Some(0);
+                    *cursor_index = Some(0);
+                    *prefix = c.to_string();
+                    return Ok((true, false));
+                }
+
+                *cursor_index = None;
+                env::set_current_dir(filtered_dirs[0].file_name().unwrap())?;
+                history.push(env::current_dir()?);
+
+                return Ok((true, false));
+            }
+
             disable_raw_mode()?;
             println!("{}", env::current_dir().unwrap().display());
             Ok((false, true))
@@ -188,6 +228,7 @@ fn handle_normal_mode(
 
             match path {
                 Some(p) => {
+                    *cursor_index = None;
                     env::set_current_dir(p)?;
                     Ok((true, false))
                 }
@@ -199,11 +240,28 @@ fn handle_normal_mode(
 
             match path {
                 Some(p) => {
+                    *cursor_index = None;
                     env::set_current_dir(p)?;
                     Ok((true, false))
                 }
                 None => Ok((false, false)),
             }
+        }
+        KeyCode::Tab => {
+            if dirs.is_empty() {
+                return Ok((false, false));
+            }
+
+            if cursor_index.is_none() {
+                *cursor_index = Some(0);
+                return Ok((true, false));
+            }
+
+            let char_map = build_char_map(dirs);
+
+            *cursor_index = Some((cursor_index.unwrap_or(0) + 1) % char_map.len());
+
+            Ok((true, false))
         }
         _ => Ok((false, false)),
     }
@@ -219,10 +277,13 @@ fn handle_select_mode(
     keybinds: &str,
     dirs: &[PathBuf],
     history: &mut PathHistory,
+    cursor_index: &mut Option<usize>,
 ) -> io::Result<(bool, bool)> {
     match e.code {
         KeyCode::Char(c) => {
-            if check_hidden_key(e, c, show_hidden) || check_home_key(c, mode, history)? {
+            if check_hidden_key(e, c, show_hidden, cursor_index)
+                || check_home_key(c, mode, history, cursor_index)?
+            {
                 return Ok((true, false));
             };
 
@@ -230,6 +291,8 @@ fn handle_select_mode(
 
             let n = filtered_dirs.len();
             let max_page = if n == 0 { 0 } else { (n - 1) / 10 };
+
+            *cursor_index = Some(0);
 
             if e.modifiers.contains(KeyModifiers::CONTROL) {
                 match c {
@@ -259,13 +322,14 @@ fn handle_select_mode(
                 }
             };
 
-            let dict = match filtered_dirs.get(index) {
-                Some(dict) => dict,
+            let dir = match filtered_dirs.get(index) {
+                Some(d) => d,
                 None => return Ok((false, false)),
             };
 
-            env::set_current_dir(dict.file_name().unwrap())?;
+            env::set_current_dir(dir.file_name().unwrap())?;
             history.push(env::current_dir()?);
+            *cursor_index = None;
             *mode = Mode::Normal;
             Ok((true, false))
         }
@@ -273,8 +337,11 @@ fn handle_select_mode(
             if prefix.len() > 1 {
                 prefix.pop();
                 *current_page = Some(0);
+                *cursor_index = Some(0);
             } else {
                 *mode = Mode::Normal;
+                *current_page = None;
+                *cursor_index = None;
             }
             Ok((true, false))
         }
@@ -285,35 +352,73 @@ fn handle_select_mode(
             Ok((true, false))
         }
         KeyCode::Enter => {
+            let index = cursor_index.unwrap_or(0) + current_page.unwrap_or(0) % 10 * 10;
+
             let filtered_dirs = starts_with(dirs, prefix);
-            let dict = match filtered_dirs.first() {
-                Some(dict) => dict,
+            let dir = match filtered_dirs.get(index) {
+                Some(d) => d,
                 None => return Ok((false, false)),
             };
 
-            env::set_current_dir(dict.file_name().unwrap())?;
+            env::set_current_dir(dir.file_name().unwrap())?;
             history.push(env::current_dir()?);
             *mode = Mode::Normal;
+            *cursor_index = None;
+            Ok((true, false))
+        }
+        KeyCode::Tab => {
+            if dirs.is_empty() {
+                return Ok((false, false));
+            }
+
+            let filtered_dirs = starts_with(dirs, prefix);
+            let n = filtered_dirs.len().min(10);
+            let max_page = if n == 0 { 0 } else { (n - 1) / 10 };
+
+            let cursor_len = if max_page == current_page.unwrap_or(0) {
+                n
+            } else {
+                filtered_dirs.len() % 10
+            };
+
+            if cursor_len == 0 {
+                return Ok((false, false));
+            }
+
+            *cursor_index = Some((cursor_index.unwrap_or(0) + 1) % cursor_len);
+
             Ok((true, false))
         }
         _ => Ok((false, false)),
     }
 }
 
-fn check_hidden_key(e: KeyEvent, c: char, show_hidden: &mut bool) -> bool {
+fn check_hidden_key(
+    e: KeyEvent,
+    c: char,
+    show_hidden: &mut bool,
+    cursor_index: &mut Option<usize>,
+) -> bool {
     if e.modifiers.contains(KeyModifiers::CONTROL) && c == 's' {
         *show_hidden = !*show_hidden;
+        *cursor_index = None;
         return true;
     }
     false
 }
 
-fn check_home_key(c: char, mode: &mut Mode, history: &mut PathHistory) -> io::Result<bool> {
+fn check_home_key(
+    c: char,
+    mode: &mut Mode,
+    history: &mut PathHistory,
+    cursor_index: &mut Option<usize>,
+) -> io::Result<bool> {
     if c == '~' {
         let home_dir = dirs::home_dir().expect("Could not find home directory.");
         env::set_current_dir(&home_dir)?;
         history.push(env::current_dir()?);
         *mode = Mode::Normal;
+        *cursor_index = None;
         return Ok(true);
     }
     Ok(false)

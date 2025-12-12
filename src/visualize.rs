@@ -1,5 +1,6 @@
 use crate::dir_util::build_char_map;
 use crate::dir_util::get_name;
+use crate::history::PathHistory;
 use crate::icons::icon_for_file;
 use crate::mode::Mode;
 use crate::screen::Screen;
@@ -91,6 +92,7 @@ impl View {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)] // I know it's bad
     pub fn display(
         &mut self,
         current_dir: &Path,
@@ -98,13 +100,24 @@ impl View {
         files: &[PathBuf],
         prefix: &str,
         current_page: usize,
+        history: &PathHistory,
+        cursor_index: &Option<usize>,
     ) -> std::io::Result<()> {
         if self.is_dirty {
-            self.print_screen(current_dir, dirs, files, prefix, current_page)?;
+            self.print_screen(
+                current_dir,
+                dirs,
+                files,
+                prefix,
+                current_page,
+                history,
+                cursor_index,
+            )?;
         }
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)] // I know it's bad
     fn print_screen(
         &mut self,
         current_dir: &Path,
@@ -112,6 +125,8 @@ impl View {
         files: &[PathBuf],
         prefix: &str,
         current_page: usize,
+        history: &PathHistory,
+        cursor_index: &Option<usize>,
     ) -> std::io::Result<()> {
         if !self.debug_messages.is_empty() {
             self.screen.write(" Debug ".black().on_cyan().bold())?;
@@ -128,12 +143,20 @@ impl View {
         let blue = self.color_or_white(Color::Blue);
         let header = format!(" {} ", path_str).black().on(blue).bold();
 
-        self.screen.write(header)?;
+        let mut history_str = format!("[{}/{}]", history.index + 1, history.buffer.len()).blue();
+
+        if history.index + 1 == history.buffer.len() {
+            history_str = String::from("").blue();
+        }
+
+        self.screen.write(format!("{} {}", header, history_str))?;
         self.screen.empty_line()?;
 
         match self.current_mode {
-            Mode::Normal => self.print_normal(dirs),
-            Mode::Select => self.print_select(dirs, prefix, current_page),
+            Mode::Normal => self.print_normal(dirs, cursor_index),
+            Mode::Select => {
+                self.print_select(dirs, prefix, current_page, cursor_index.unwrap_or(0))
+            }
         }?;
 
         // let file_str = files
@@ -175,7 +198,11 @@ impl View {
         Ok(())
     }
 
-    fn print_normal(&mut self, dirs: &[PathBuf]) -> std::io::Result<()> {
+    fn print_normal(
+        &mut self,
+        dirs: &[PathBuf],
+        cursor_index: &Option<usize>,
+    ) -> std::io::Result<()> {
         //let dir_single_icon = if self.use_icons { "  " } else { "" };
         let dir_multiple_icon = if self.use_icons { "󰉓  " } else { "" };
 
@@ -190,7 +217,7 @@ impl View {
 
         let char_map = build_char_map(dirs);
 
-        for directories_with_char in char_map {
+        for (index, directories_with_char) in char_map.iter().enumerate() {
             let (char, directories) = directories_with_char;
             let is_multiple = directories.len() > 1;
 
@@ -200,10 +227,18 @@ impl View {
                 .collect::<Vec<String>>()
                 .join(" ");
 
+            let mut char_disp = char.white();
+
+            if let Some(i) = cursor_index
+                && i == &index
+            {
+                char_disp = char_disp.on_white().black();
+            }
+
             if is_multiple {
                 self.screen.write(format!(
                     "[{}?] {}",
-                    char,
+                    char_disp,
                     format!("{}{}", dir_multiple_icon, dir_str).white()
                 ))?;
             } else {
@@ -216,7 +251,7 @@ impl View {
 
                 self.screen.write(format!(
                     "[{}] {}",
-                    char,
+                    char_disp,
                     format!("{}{}", icon, dir_str).with(yellow)
                 ))?;
             }
@@ -232,6 +267,7 @@ impl View {
         dirs: &[PathBuf],
         prefix: &str,
         current_page: usize,
+        cursor_index: usize,
     ) -> std::io::Result<()> {
         //let dir_single_icon = if self.use_icons { "  " } else { "" };
 
@@ -257,10 +293,15 @@ impl View {
         let other_dirs = [&filtered_dirs[..start_idx], &filtered_dirs[end_idx..]].concat();
 
         for (i, directory) in current_slice.iter().enumerate() {
-            let number = match self.keybinds.chars().nth(i) {
+            let mut number = match self.keybinds.chars().nth(i) {
                 Some(c) => c.to_string(),
                 None => String::from("..."),
-            };
+            }
+            .white();
+
+            if cursor_index == i {
+                number = number.on_white().black();
+            }
 
             let icon: &str = if self.use_icons {
                 &format!("{}  ", icon_for_file(directory))[..]
