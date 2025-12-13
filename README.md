@@ -3,7 +3,7 @@
 <img width="1920" height="720" alt="TwiggleV2" src="https://github.com/user-attachments/assets/4072ae58-9925-45cb-87e6-6a98cec75edc" />
 
 ---
-twiggle is a fast directory traversal tool which allows you to move between directories using keybinds. Have a look at the [Demo](demo) for a more detailed look!
+twiggle is a fast directory traversal tool which allows you to move between directories using keybinds. Have a look at the [Demo](#demo) for a more detailed look!
 
 ## Installation
 To install twiggle, it is currently necessary to have `cargo` set up. For more information, look at the [rustup](https://rust-lang.org/tools/install/) installation guide.
