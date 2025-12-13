@@ -3,7 +3,7 @@
 <img width="1920" height="720" alt="TwiggleV2" src="https://github.com/user-attachments/assets/4072ae58-9925-45cb-87e6-6a98cec75edc" />
 
 ---
-twiggle is a fast directory traversal tool which allows you to move between directories using keybinds.
+twiggle is a fast directory traversal tool which allows you to move between directories using keybinds. Have a look at the [Demo](demo) for a more detailed look!
 
 ## Installation
 To install twiggle, it is currently necessary to have `cargo` set up. For more information, look at the [rustup](https://rust-lang.org/tools/install/) installation guide.
@@ -74,6 +74,9 @@ Remember to add these to your shell configuration file instead of behind the ali
 | Tab navigation | `<Enter>`     | Move to selected directory.          |
 | Tab navigation | `<Tab>`       | Select next directory.               |
 
+## Demo
+
+![Demo](https://github.com/user-attachments/assets/5aa36410-899e-477a-8ef8-17979e1a34bf)
 
 ## Special Thanks
 Displaying icons per file type was made possible with the logic inside `icons.rs` which was written by the [eza-community](https://github.com/eza-community/eza).
